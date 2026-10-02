@@ -15,42 +15,38 @@ EEE 416 Project · Department of EEE, BUET
 
 ---
 
-## Why it is built this way
+## Design intent
 
-Most pill reminders beep and hope. The problem with an elderly household is not
-being reminded — it is that the **wrong medicine gets taken**, or nobody can say
-afterwards whether it was taken at all.
+Most pill reminders beep and hope. In an elderly household the problem is not
+the reminder — it is the **wrong medicine being taken**, and nobody able to say
+afterwards whether it was taken at all. Three rules follow:
 
-So three rules drive the whole design:
+- **Only the scheduled person, only during their dose window, opens that
+  compartment.** An enrolled but wrong fingerprint opens nothing; a correct
+  fingerprint outside a dose window opens nothing.
+- **Every dose ends in a recorded outcome** — taken, missed, or unconfirmed.
+- **The device must be useful with no network at all.** Reminders, fingerprint,
+  locks, screen and log are entirely local; the network is optional everywhere.
 
-1. **Only the scheduled person, only during their dose window, opens that
-   compartment.** An enrolled but wrong fingerprint opens nothing. A correct
-   fingerprint outside a dose window opens nothing.
-2. **Every dose ends in a recorded outcome** — taken, missed, or unconfirmed.
-   Never silently.
-3. **The device is useless if it needs the internet.** Reminders, fingerprint,
-   locks, screen and log are entirely local. The network is optional everywhere.
-
-Everything the user sees or hears is Bengali. Code identifiers stay English;
-pixels and audio do not.
+Everything the user sees or hears is Bengali.
 
 ---
 
-## What it does
+## Features
 
 | | |
 |---|---|
 | **Scheduling** | 4 compartments, independent times, per-dose medicine name and course length |
-| **Authentication** | R307S fingerprint, 3 identities — two residents and a caretaker |
+| **Authentication** | R307S fingerprint — two residents and a caretaker with override rights |
 | **Locks** | 4 solenoids, 400 ms pulse, one at a time, software interlocked |
 | **Display** | 1.54" e-paper, Bengali, partial refresh |
 | **Voice** | 17 Bengali prompts over DFPlayer Mini |
-| **Logging** | Append-only CSV on 9.8 MB of on-chip flash — about 34 years of doses |
+| **Logging** | Append-only CSV on 9.8 MB of on-chip flash — roughly 34 years of doses |
 | **Dashboard** | Bengali web UI served by the device's own Wi-Fi access point, no router needed |
 | **Alerts** | Optional Telegram — missed doses as they happen, plus a daily summary |
 | **Power** | Light sleep between doses, hardware RTC alarm wake |
 
-### A dose, start to finish
+### Dose sequence
 
 ```
 buzzer ──▶ "দাদু, ঔষধ গ্রহণের সময় হয়েছে"  ──▶ আঙুলের ছাপ দিন
@@ -71,33 +67,20 @@ No fingerprint within 10 minutes → **MISSED**, logged and alerted.
 
 ---
 
-## Bengali on a microcontroller
+## Bengali rendering
 
-This was the hard part, and it is the piece most reusable elsewhere.
+Bengali is a shaping problem, not a font problem: `ক` + `্` + `ষ` must become the
+single conjunct `ক্ষ`, not three glyphs side by side. HarfBuzz is far too heavy to
+run on an ESP32.
 
-Bengali is not a font problem — it is a **shaping** problem. `ক` + `্` + `ষ`
-must become the single conjunct `ক্ষ`, not three glyphs side by side. Running
-HarfBuzz on an ESP32 is not realistic.
+The solution is to **shape offline and render directly**. HarfBuzz and FreeType
+pre-shape and rasterise every cluster the interface needs into a flat table —
+**74 single glyphs and 4,247 pre-shaped clusters** at 28 px, about 0.64 MB in
+flash. At runtime the renderer walks each string longest-cluster-first, matching
+sequences of up to 8 codepoints.
 
-The approach here is to **pre-shape offline and render directly**:
-
-- HarfBuzz + FreeType shape and rasterise every cluster the interface needs
-- the result is a flat table of **74 single glyphs and 4,247 pre-shaped
-  clusters** at 28 px, compiled into flash (~0.64 MB)
-- at runtime the renderer walks the string **longest-cluster-first**, so the
-  longest matching sequence of up to 8 codepoints wins
-
-Two things that cost real debugging time, documented here so they cost you less:
-
-- **Nukta must be precomposed.** The interface text uses the decomposed form
-  (`য` + `়`), the font only has precomposed `য়` (U+09DF). This is *not* Unicode
-  NFC — those codepoints are composition exclusions, so NFC actively produces
-  the broken form. Three explicit substitutions are applied before rendering.
-- **The font has no fallback.** Any cluster it lacks renders as a blank box, and
-  Latin text renders as blank boxes too. Every Bengali string in this project was
-  verified against the actual font tables before being committed.
-
-See [`libraries/BanglaEPD`](libraries/BanglaEPD).
+The result is correct conjuncts, reph, র-ফলা and য-ফলা on a microcontroller, with
+no shaping engine on the device. See [`libraries/BanglaEPD`](libraries/BanglaEPD).
 
 ---
 
@@ -116,10 +99,8 @@ See [`libraries/BanglaEPD`](libraries/BanglaEPD).
 | Buzzer | 16 |
 
 Solenoids are driven by LR7843 modules with flyback diodes and 10 kΩ pulldowns,
-so they stay shut at power-up. Firmware drives all four LOW as the very first
-statement in `setup()`, before the serial port is even opened — GPIO 39–42 are
-also the chip's JTAG pins, and a fresh flash does not leave them the way a reset
-does.
+and the firmware holds all four low from the first instruction in `setup()`, so
+the compartments stay shut from the instant the board powers on.
 
 <p align="center">
   <img src="hardware/pcb-layout.jpg" width="700" alt="PCB layout">
@@ -133,19 +114,16 @@ Schematics: [overview](hardware/schematic-overview.jpg) ·
 
 ## Security model
 
-The compartment is the asset, so the rules are deliberately narrow.
-
 - **There is no remote unlock.** Not disabled — absent. No endpoint, no serial
-  command, no Telegram command opens a compartment. It needs a finger on the
-  sensor, in person.
+  command, no message opens a compartment. It needs a finger on the sensor.
 - **The dashboard PIN gates every write.** Reading is open; changing a schedule,
-  the clock, or a fingerprint is not.
-- **Replacing a fingerprint needs the old one first**, so the PIN alone cannot
-  transfer someone's access. Adding the first caretaker needs a resident's
-  finger — a master key requires someone trusted to be physically present.
-- **Telegram is outbound only.** Nothing on the internet can open a connection
-  to the box.
-- **Overrides are never silent.** Caretaker unlocks, button overrides and skipped
+  the clock or a fingerprint is not.
+- **Replacing a fingerprint requires the old one first**, so the PIN alone cannot
+  transfer someone's access. Adding the first caretaker requires a resident's
+  fingerprint.
+- **Telegram is outbound only.** Nothing on the internet can open a connection to
+  the device.
+- **Overrides are never silent** — caretaker unlocks, button overrides and skipped
   doses are all logged and alerted.
 
 ---
@@ -160,37 +138,35 @@ hardware/                 PCB and schematics
 docs/                     user manual, build settings, test checklist
 ```
 
-- **[docs/USER-MANUAL.md](docs/USER-MANUAL.md)** — how to actually use the box
-- **[docs/SETUP-AND-TESTS.md](docs/SETUP-AND-TESTS.md)** — board settings and the
-  verification checklist
-- **[firmware/BUILD.md](firmware/BUILD.md)** — build and flash
+- **[docs/USER-MANUAL.md](docs/USER-MANUAL.md)** — operating the device
+- **[firmware/BUILD.md](firmware/BUILD.md)** — libraries, board settings, flashing
+- **[docs/SETUP-AND-TESTS.md](docs/SETUP-AND-TESTS.md)** — verification checklist
 
 ---
 
 ## Build
 
-Arduino IDE 2.x, ESP32 core 3.3.7. Copy `libraries/BanglaEPD` and
+Arduino IDE 2.x with ESP32 core 3.3.7. Copy `libraries/BanglaEPD` and
 `libraries/BanglaUTF8` into your Arduino `libraries/` folder, then open
-`firmware/integration_8/integration_8.ino`.
+`firmware/integration_8/integration_8.ino`. Board settings are in
+[firmware/BUILD.md](firmware/BUILD.md).
 
-Full board settings are in [firmware/BUILD.md](firmware/BUILD.md).
-
-Copy `audio/MP3/` to the root of a FAT32 SD card for the voice prompts. The box
-works without them — the screen carries the same instruction and the buzzer
-always sounds.
+Copy `audio/MP3/` to the root of a FAT32 SD card for the voice prompts. The
+device works without them — the screen carries the same instruction and the
+buzzer always sounds.
 
 ---
 
-## Status
+## Scope
 
-Working: Bengali screens · right person only · right time only · course duration ·
-override · power-cut recovery · event log · on-device dose browsing and
-rescheduling · fingerprint enrolment · local dashboard · Telegram alerts ·
-power saving.
+Implemented: Bengali screens, voice and dashboard · per-user fingerprint
+authorisation with caretaker override · course duration and final-dose handling ·
+on-device dose browsing and rescheduling · fingerprint enrolment · persistent
+event log · power-cut recovery · Telegram alerts · battery power saving.
 
-Not built: reed switches for door-close detection. The firmware supports them
-behind `HAS_REED_SENSORS`; the hardware is not fitted, so "unconfirmed" relies
-on the confirm button rather than a door sensor.
+Reed switches for door-close detection are supported in firmware behind
+`HAS_REED_SENSORS` but are not fitted, so an unconfirmed dose is determined by
+the confirm button rather than a door sensor.
 
 ---
 
@@ -201,7 +177,7 @@ Department of Electrical and Electronic Engineering, BUET
 
 Licensed under the [MIT License](LICENSE).
 
-> The Bengali font tables in `libraries/BanglaEPD/BanglaFont.cpp` are glyph
-> bitmaps generated with HarfBuzz and FreeType from a Bengali typeface. The MIT
-> licence covers this project's own code; check the upstream typeface's licence
-> before reusing those tables in your own work.
+> The Bengali glyph tables in `libraries/BanglaEPD/BanglaFont.cpp` are generated
+> with HarfBuzz and FreeType from a Bengali typeface. The MIT licence covers this
+> project's own code; check the upstream typeface's licence before reusing those
+> tables elsewhere.
