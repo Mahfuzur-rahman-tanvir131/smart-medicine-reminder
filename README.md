@@ -86,42 +86,9 @@ no shaping engine on the device. See [`libraries/BanglaEPD`](libraries/BanglaEPD
 
 ## Hardware
 
-**ESP32-S3-WROOM-1** (N16R8 — 16 MB flash, 8 MB OPI PSRAM)
-
-| GPIO | Connected to | Direction | Fitted |
-|---|---|---|---|
-| 1 | R307S fingerprint — TX | UART2 out | yes |
-| 2 | R307S fingerprint — RX @ 57600 | UART2 in | yes |
-| 4 | Button UP | input, pull-up | yes |
-| 5 | Button DOWN | input, pull-up | yes |
-| 6 | Button SELECT | input, pull-up | yes |
-| 7 | Button BACK (also a wake source) | input, pull-up | yes |
-| 8 | DS3231 RTC — SDA | I²C | yes |
-| 9 | DS3231 RTC — SCL | I²C | yes |
-| 10 | E-paper CS | SPI out | yes |
-| 11 | E-paper MOSI | SPI out | yes |
-| 12 | E-paper SCK | SPI out | yes |
-| 13 | E-paper DC | out | yes |
-| 14 | E-paper RST | out | yes |
-| 15 | E-paper BUSY | in | yes |
-| 16 | Buzzer (LEDC PWM) | out | yes |
-| 17 | DFPlayer Mini — TX | UART1 out | yes |
-| 18 | DFPlayer Mini — RX | UART1 in | yes |
-| 21 | DS3231 INT/SQW — alarm wake | input, pull-up | yes |
-| 38 | Reed switch chain (door closed) | input, pull-up | **not fitted** |
-| 39 | Lock C1 driver | out, active HIGH | yes |
-| 40 | Lock C2 driver | out, active HIGH | yes |
-| 41 | Lock C3 driver | out, active HIGH | yes |
-| 42 | Lock C4 driver | out, active HIGH | yes |
-
-GPIO 3, 19, 20 and 43–48 are unused. **GPIO 26–37 are not available** — they are
-the octal flash and PSRAM lines on the N16R8 module and must be left alone.
-
-Reed switches on GPIO 38 are written and tested in firmware but switched off at
-`HAS_REED_SENSORS 0`, because the hardware is not installed. Without them an
-unconfirmed dose is determined by the confirm button rather than a door sensor.
-The e-paper SPI bus is clocked at 2 MHz rather than the library default of
-10 MHz, for reliability over the jumper-lead wiring.
+**ESP32-S3-WROOM-1** (N16R8 — 16 MB flash, 8 MB OPI PSRAM), with a DS3231
+real-time clock, a 1.54" e-paper display, an R307S fingerprint sensor, a
+DFPlayer Mini for voice, four push buttons and four solenoid locks.
 
 Solenoids are driven by LR7843 modules with flyback diodes and 10 kΩ pulldowns,
 and the firmware holds all four low from the first instruction in `setup()`, so
