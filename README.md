@@ -2,7 +2,7 @@
 
 A biometric medicine box for two elderly users, with a fully Bengali interface.
 
-At the scheduled time it sounds a buzzer, speaks in Bangla, and unlocks **only the
+At the scheduled time it sounds a buzzer, speaks in Bangla and unlocks **only the
 correct compartment**, and **only** for the fingerprint of the person that dose
 belongs to. Every dose is recorded. Nothing in the user's path requires a phone,
 an account, or an internet connection.
