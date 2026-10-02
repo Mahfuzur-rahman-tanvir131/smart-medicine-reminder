@@ -10,7 +10,7 @@ an account, or an internet connection.
 EEE 416 Project · Department of EEE, BUET
 
 <p align="center">
-  <img src="hardware/pcb-3d.jpg" width="640" alt="PCB, 3D render">
+  <img src="hardware/pcb-3d.png" width="640" alt="PCB, 3D render">
 </p>
 
 ---
