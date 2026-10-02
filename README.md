@@ -88,15 +88,40 @@ no shaping engine on the device. See [`libraries/BanglaEPD`](libraries/BanglaEPD
 
 **ESP32-S3-WROOM-1** (N16R8 — 16 MB flash, 8 MB OPI PSRAM)
 
-| Function | Pins |
-|---|---|
-| I²C — DS3231 RTC | SDA 8, SCL 9, INT 21 |
-| E-paper — 1.54" SSD1681 | CS 10, MOSI 11, SCK 12, DC 13, RST 14, BUSY 15 |
-| DFPlayer Mini | RX 18, TX 17 |
-| R307S fingerprint | RX 2, TX 1 @ 57600 |
-| Buttons | UP 4, DOWN 5, SELECT 6, BACK 7 |
-| Solenoid locks | C1 39, C2 40, C3 41, C4 42 — active HIGH |
-| Buzzer | 16 |
+| GPIO | Connected to | Direction | Fitted |
+|---|---|---|---|
+| 1 | R307S fingerprint — TX | UART2 out | yes |
+| 2 | R307S fingerprint — RX @ 57600 | UART2 in | yes |
+| 4 | Button UP | input, pull-up | yes |
+| 5 | Button DOWN | input, pull-up | yes |
+| 6 | Button SELECT | input, pull-up | yes |
+| 7 | Button BACK (also a wake source) | input, pull-up | yes |
+| 8 | DS3231 RTC — SDA | I²C | yes |
+| 9 | DS3231 RTC — SCL | I²C | yes |
+| 10 | E-paper CS | SPI out | yes |
+| 11 | E-paper MOSI | SPI out | yes |
+| 12 | E-paper SCK | SPI out | yes |
+| 13 | E-paper DC | out | yes |
+| 14 | E-paper RST | out | yes |
+| 15 | E-paper BUSY | in | yes |
+| 16 | Buzzer (LEDC PWM) | out | yes |
+| 17 | DFPlayer Mini — TX | UART1 out | yes |
+| 18 | DFPlayer Mini — RX | UART1 in | yes |
+| 21 | DS3231 INT/SQW — alarm wake | input, pull-up | yes |
+| 38 | Reed switch chain (door closed) | input, pull-up | **not fitted** |
+| 39 | Lock C1 driver | out, active HIGH | yes |
+| 40 | Lock C2 driver | out, active HIGH | yes |
+| 41 | Lock C3 driver | out, active HIGH | yes |
+| 42 | Lock C4 driver | out, active HIGH | yes |
+
+GPIO 3, 19, 20 and 43–48 are unused. **GPIO 26–37 are not available** — they are
+the octal flash and PSRAM lines on the N16R8 module and must be left alone.
+
+Reed switches on GPIO 38 are written and tested in firmware but switched off at
+`HAS_REED_SENSORS 0`, because the hardware is not installed. Without them an
+unconfirmed dose is determined by the confirm button rather than a door sensor.
+The e-paper SPI bus is clocked at 2 MHz rather than the library default of
+10 MHz, for reliability over the jumper-lead wiring.
 
 Solenoids are driven by LR7843 modules with flyback diodes and 10 kΩ pulldowns,
 and the firmware holds all four low from the first instruction in `setup()`, so
@@ -109,6 +134,56 @@ the compartments stay shut from the instant the board powers on.
 Schematics: [overview](hardware/schematic-overview.jpg) ·
 [power and locks](hardware/schematic-power-locks.jpg) ·
 [low voltage](hardware/schematic-low-voltage.jpg)
+
+---
+
+## Power
+
+The box is battery powered, so it behaves like a phone screen: asleep by
+default, awake only when it has something to do.
+
+```
+SLEEP  ─────────── most of the day · CPU in light sleep · radio OFF
+  │                e-paper still shows the clock at zero power
+  │
+  ├─ DS3231 alarm (GPIO 21) ──▶ DOSE    wakes itself, radio stays OFF
+  │                                     a dose needs no network at all
+  │
+  ├─ BACK held 3 s ───────────▶ AWAKE   full mode, Wi-Fi on, dashboard up
+  │
+  └─ missed dose ─────────────▶ 2 min   radio up just long enough to send
+                                        the alert, then off again
+```
+
+**What actually saves the power**
+
+- **Light sleep between doses.** The CPU wakes on a 15-second tick, on the
+  DS3231 hardware alarm, or on the BACK button. Deep sleep was rejected
+  deliberately: on a dev module the regulator quiescent current, power LED and
+  USB bridge set a floor of roughly 15 mA either way, so deep sleep costs RAM
+  loss and re-initialisation for almost no gain.
+- **The radio is a separate switch from the CPU.** A dose is entirely local, so
+  Wi-Fi stays off through it. The radio comes up for exactly three reasons: the
+  user asks for the dashboard, a missed dose needs reporting, or the daily
+  summary is due. Running Wi-Fi through four dose windows a day would cost about
+  110 mAh for no benefit.
+- **E-paper holds its image at zero power.** The idle screen stays readable with
+  the CPU asleep, which is why it shows the next dose rather than a live clock —
+  a ticking clock would force a wake-up every minute just to stay honest.
+- **Partial refresh.** In power-saving mode only the time band is repainted, once
+  every two minutes. A full refresh is roughly four times the energy and flashes
+  the whole panel.
+- **Nothing idles loudly.** The buzzer is PWM-off between doses, the DFPlayer is
+  only addressed when something is to be said, and the fingerprint sensor is read
+  only inside a dose window or an enrolment.
+
+Power saving is toggled by holding **UP + DOWN** for 3 seconds, and left by
+holding **BACK** for 3 seconds. The device also returns to it by itself once a
+dose finishes.
+
+> The firmware never enters light sleep while USB is connected — sleeping kills
+> the USB CDC peripheral and freezes the serial monitor. On battery it sleeps
+> normally.
 
 ---
 
@@ -154,19 +229,6 @@ Arduino IDE 2.x with ESP32 core 3.3.7. Copy `libraries/BanglaEPD` and
 Copy `audio/MP3/` to the root of a FAT32 SD card for the voice prompts. The
 device works without them — the screen carries the same instruction and the
 buzzer always sounds.
-
----
-
-## Scope
-
-Implemented: Bengali screens, voice and dashboard · per-user fingerprint
-authorisation with caretaker override · course duration and final-dose handling ·
-on-device dose browsing and rescheduling · fingerprint enrolment · persistent
-event log · power-cut recovery · Telegram alerts · battery power saving.
-
-Reed switches for door-close detection are supported in firmware behind
-`HAS_REED_SENSORS` but are not fitted, so an unconfirmed dose is determined by
-the confirm button rather than a door sensor.
 
 ---
 
