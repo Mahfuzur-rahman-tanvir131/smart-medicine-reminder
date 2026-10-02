@@ -154,6 +154,28 @@ dose finishes.
 
 ---
 
+## Dashboard
+
+The device runs its own Wi-Fi access point, so a phone can reach the dashboard
+with **no router and no internet**. Join `Oshudh-Box` and the Bengali page opens
+by itself. Reading anything is free; every change asks for a PIN.
+
+It is served straight from flash by an asynchronous web server, so the network
+can never stall a dose timer.
+
+| | | |
+|---|---|---|
+| ![Summary](docs/screenshots/dashboard-summary.jpg) | ![Schedule](docs/screenshots/dashboard-schedule.jpg) | ![Device](docs/screenshots/dashboard-device.jpg) |
+| **সারসংক্ষেপ** — next dose and the running count of taken, missed and unconfirmed | **সময়সূচি** — dose times, on/off, and Bengali medicine names typed on a real keyboard | **যন্ত্র** — health, fingerprint enrolment and Telegram setup |
+
+A fourth tab, **ইতিহাস**, lists every recorded event.
+
+The dashboard deliberately **cannot open a compartment** — there is no such
+control and no such endpoint. It also enforces the same 15-minute minimum gap
+between doses that the on-device buttons do.
+
+---
+
 ## Security model
 
 - **There is no remote unlock.** Not disabled — absent. No endpoint, no serial
